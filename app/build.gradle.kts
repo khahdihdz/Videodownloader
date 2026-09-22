@@ -3,10 +3,13 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+
 android {
     namespace = "com.khahdihdz.videodownloader"
     compileSdk = 35
+
     defaultConfig {
         applicationId = "com.khahdihdz.videodownloader"
         minSdk = 24
@@ -15,10 +18,32 @@ android {
         versionName = "1.0." + buildNumber
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildTypes { release { isMinifyEnabled = false; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }\n    lint {\n        // Work around an AndroidX Lifecycle lint detector crash caused by an incompatible Kotlin Analysis API.\n        disable += "NullSafeMutableLiveData"\n    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    lint {
+        // Work around an AndroidX Lifecycle lint detector crash caused by an incompatible Kotlin Analysis API.
+        disable += "NullSafeMutableLiveData"
+    }
 }
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
