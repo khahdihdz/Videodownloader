@@ -39,8 +39,9 @@ android {
     }
 
     lint {
-        // Work around an AndroidX Lifecycle lint detector crash caused by an incompatible Kotlin Analysis API.
+        // Work around lint detector crashes caused by an incompatible Kotlin Analysis API.
         disable += "NullSafeMutableLiveData"
+        disable += "RememberInComposition"
     }
 }
 
