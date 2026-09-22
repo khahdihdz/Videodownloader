@@ -1,25 +1,58 @@
 package com.khahdihdz.videodownloader
-import com.sapher.youtubedl.YoutubeDL
-import com.sapher.youtubedl.YoutubeDLRequest
+import android.content.Context
+import dev.ffmpegkit_maintained.ytdlp.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URLEncoder
+import java.net.URL
 import java.io.File
+
 data class Format(val id:String,val height:Int,val label:String)
 data class VideoInfo(val url:String,val platform:VideoPlatform,val title:String,val duration:Long,val thumbnail:String?,val formats:List<Format>)
-class Downloader {
+
+class Downloader(context: Context) {
+ init { YtDlp.init(context.applicationContext) }
+
  suspend fun analyze(url:String):VideoInfo {
-  val r=YoutubeDLRequest(url).apply{addOption("--dump-single-json");addOption("--no-playlist");addOption("--no-warnings");addOption("--skip-download")}
-  val root=JSONObject(YoutubeDL.execute(r).out); val fs=mutableListOf<Format>(); val a=root.optJSONArray("formats")
-  if(a!=null) for(i in 0 until a.length()){ val f=a.optJSONObject(i)?:continue; val h=f.optInt("height",0); val v=f.optString("vcodec","none")!="none"; val au=f.optString("acodec","none")!="none"; if(v&&au&&h>0) fs+=Format(f.optString("format_id"),h,h.toString()+"p") }
-  val clean=fs.distinctBy{it.height}.sortedBy{it.height}
-  return VideoInfo(url,UrlDetector.detect(url),root.optString("title","Video"),root.optLong("duration",0),root.optString("thumbnail",null),clean)
+  val meta = fetchOembedOrPage(url)
+  val logs = mutableListOf<String>()
+  val req=YtDlpRequest(url).addOption("-F").addOption("--no-playlist")
+  YtDlp.executeDebug(req, object:LogCallback{override fun onLog(level:String,message:String){logs += message}}, null).get()
+  val heights=logs.flatMap{line->Regex("""\b(\d{3,4})p\b""").findAll(line).map{it.groupValues[1].toInt()}.toList()}
+    .filter{it>0&&it<=4320}.distinct().sorted()
+  val formats=heights.map{Format("best[height<="+it+"]",it,it.toString()+"p")}
+  if(formats.isEmpty()) throw IllegalStateException("Không có format video phù hợp.")
+  return VideoInfo(url,UrlDetector.detect(url),meta.first,meta.second,meta.third,formats)
  }
+
+ private fun fetchOembedOrPage(url:String):Triple<String,Long,String?> {
+  return try {
+   val api="https://www.youtube.com/oembed?url="+URLEncoder.encode(url,"UTF-8")+"&format=json"
+   val conn=URL(api).openConnection() as HttpURLConnection
+   conn.connectTimeout=10000;conn.readTimeout=10000
+   if(conn.responseCode in 200..299){
+    val j=JSONObject(conn.inputStream.bufferedReader().use{it.readText()})
+    return Triple(j.optString("title","Video"),0L,j.optString("thumbnail_url",null))
+   }
+  } catch(_:Throwable){}
+  val c=URL(url).openConnection() as HttpURLConnection
+  c.connectTimeout=10000;c.readTimeout=10000;c.requestProperty("User-Agent","Mozilla/5.0")
+  val html=c.inputStream.bufferedReader().use{it.readText()}
+  val title=Regex("""<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
+    ?: Regex("""<title>(.*?)</title>""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
+    ?: "Video"
+  val thumb=Regex("""<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
+  return Triple(title.replace("&amp;","&"),0L,thumb)
+ }
+
  fun download(info:VideoInfo,f:Format,out:File):Flow<Int>=channelFlow{
-  val r=YoutubeDLRequest(info.url).apply{addOption("-f",f.id+"/best[height<="+f.height+"]/best");addOption("-o",out.absolutePath);addOption("--no-playlist");addOption("--newline")}
-  YoutubeDL.execute(r){p,_->trySend(p.toInt().coerceIn(0,100)).isSuccess}
-  trySend(100);close()
-  awaitClose{}
+  val req=YtDlpRequest(info.url).setOutputTemplate(out.absolutePath).addOption("-f",f.id).addOption("--no-playlist").addOption("--newline")
+  val job=YtDlp.executeAsync(req,object:DownloadProgressCallback{
+   override fun onProgressUpdate(progress:Float,etaInSeconds:Long,line:String){trySend(progress.toInt().coerceIn(0,100))}
+  })
+  launch { try { job.get(); trySend(100) } finally { close() } }
  }
 }
