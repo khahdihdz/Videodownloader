@@ -59,29 +59,55 @@ class Downloader(context: Context) {
  }
 
  private fun fetchOembedOrPage(url:String):Triple<String,Long,String?> {
+  val videoId = youtubeVideoId(url)
+  val thumbnail = videoId?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
+
+  // Try YouTube oEmbed first. This is independent from yt-dlp/format extraction.
   try {
    val api="https://www.youtube.com/oembed?url="+URLEncoder.encode(url,"UTF-8")+"&format=json"
    val conn=URL(api).openConnection() as HttpURLConnection
-   conn.connectTimeout=10000;conn.readTimeout=10000
+   conn.connectTimeout=12000;conn.readTimeout=12000
+   conn.instanceFollowRedirects=true
+   conn.setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36")
+   conn.setRequestProperty("Accept","application/json,text/plain,*/*")
+   conn.setRequestProperty("Accept-Language","vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
    if(conn.responseCode in 200..299){
     val j=JSONObject(conn.inputStream.bufferedReader().use{it.readText()})
-    return Triple(j.optString("title","Video"),0L,j.optString("thumbnail_url",null))
+    val title=j.optString("title").trim()
+    if(title.isNotBlank()) return Triple(title,0L,j.optString("thumbnail_url",thumbnail))
    }
   } catch(_:Throwable){}
 
-  return try {
+  // Fallback: fetch the normal YouTube page and parse OpenGraph / embedded title.
+  try {
    val conn=URL(url).openConnection() as HttpURLConnection
-   conn.connectTimeout=10000;conn.readTimeout=10000
+   conn.connectTimeout=12000;conn.readTimeout=12000
+   conn.instanceFollowRedirects=true
    conn.setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36")
-   conn.setRequestProperty("Accept-Language","vi-VN,vi;q=0.9,en;q=0.8")
+   conn.setRequestProperty("Accept-Language","vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
+   conn.setRequestProperty("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
    val html=conn.inputStream.bufferedReader().use{it.readText()}
-   val title=findMeta(html,"og:title") ?: Regex("""<title[^>]*>(.*?)</title>""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1) ?: "Video"
-   val thumb=findMeta(html,"og:image")
-   Triple(decodeHtml(title).trim(),0L,thumb?.let(::decodeHtml))
-  } catch(e:Throwable) {
-   throw IllegalStateException("Không lấy được thông tin video: "+(e.message?:"unknown"),e)
-  }
+   val title=findMeta(html,"og:title")
+    ?: Regex("""<title[^>]*>(.*?)</title>""",RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.get(1)
+    ?: Regex("""\"title\"s*:s*\"((?:\\.|[^\"])*)\"""").find(html)?.groupValues?.get(1)
+   if(!title.isNullOrBlank()) return Triple(decodeHtml(title).trim(),0L,findMeta(html,"og:image")?.let(::decodeHtml) ?: thumbnail)
+  } catch(_:Throwable){}
+
+  // Last-resort metadata: never fail analysis just because YouTube blocks metadata endpoints.
+  return Triple(if(videoId != null) "YouTube video ($videoId)" else "YouTube video",0L,thumbnail)
  }
+
+ private fun youtubeVideoId(url:String):String? = runCatching {
+  val u=java.net.URI(url.trim())
+  val host=(u.host?:"").lowercase().removePrefix("www.")
+  when {
+   host=="youtu.be" -> u.path.trim('/').substringBefore('/').takeIf{it.matches(Regex("[A-Za-z0-9_-]{6,}"))}
+   else -> (u.getQueryParam("v")
+    ?: u.path.substringAfter("/shorts/","").substringBefore('/')
+    ?: u.path.substringAfter("/live/","").substringBefore('/'))
+     .takeIf{it.matches(Regex("[A-Za-z0-9_-]{6,}"))}
+  }
+ }.getOrNull()
 
  private fun findMeta(html:String,name:String):String? {
   val tags=Regex("""<meta\s+[^>]*>""",RegexOption.IGNORE_CASE).findAll(html)
