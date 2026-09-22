@@ -88,7 +88,7 @@ class Downloader(context: Context) {
    conn.setRequestProperty("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
    val html=conn.inputStream.bufferedReader().use{it.readText()}
    val title=findMeta(html,"og:title")
-    ?: Regex("""<title[^>]*>(.*?)</title>""",RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.get(1)
+    ?: Regex("""<title[^>]*>(.*?)</title>""",setOf(RegexOption.IGNORE_CASE,RegexOption.DOT_MATCHES_ALL)).find(html)?.groupValues?.get(1)
     ?: Regex("""\"title\"s*:s*\"((?:\\.|[^\"])*)\"""").find(html)?.groupValues?.get(1)
    if(!title.isNullOrBlank()) return Triple(decodeHtml(title).trim(),0L,findMeta(html,"og:image")?.let(::decodeHtml) ?: thumbnail)
   } catch(_:Throwable){}
