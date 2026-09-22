@@ -29,7 +29,7 @@ class Downloader(context: Context) {
  }
 
  private fun fetchOembedOrPage(url:String):Triple<String,Long,String?> {
-  return try {
+  try {
    val api="https://www.youtube.com/oembed?url="+URLEncoder.encode(url,"UTF-8")+"&format=json"
    val conn=URL(api).openConnection() as HttpURLConnection
    conn.connectTimeout=10000;conn.readTimeout=10000
@@ -38,16 +38,16 @@ class Downloader(context: Context) {
     return Triple(j.optString("title","Video"),0L,j.optString("thumbnail_url",null))
    }
   } catch(_:Throwable){}
-  val c=URL(url).openConnection() as HttpURLConnection
-  c.connectTimeout=10000;c.readTimeout=10000;c.setRequestProperty("User-Agent","Mozilla/5.0")
-  val html=c.inputStream.bufferedReader().use{it.readText()}
-  val title=Regex("""<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
-    ?: Regex("""<title>(.*?)</title>""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
-    ?: "Video"
-  val thumb=Regex("""<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
-  return Triple(title.replace("&amp;","&"),0L,thumb)
+  return try {
+   val conn=URL(url).openConnection() as HttpURLConnection
+   conn.connectTimeout=10000;conn.readTimeout=10000;conn.setRequestProperty("User-Agent","Mozilla/5.0")
+   val html=conn.inputStream.bufferedReader().use{it.readText()}
+   val title=Regex("""<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
+    ?: Regex("""<title>(.*?)</title>""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1) ?: "Video"
+   val thumb=Regex("""<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']""",RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
+   Triple(title.replace("&amp;","&"),0L,thumb)
+  } catch(e:Throwable) { throw IllegalStateException("Không lấy được metadata: "+(e.message?:"unknown"),e) }
  }
-
  fun download(info:VideoInfo,f:Format,out:File):Flow<Int> = channelFlow{
   val req=YtDlpRequest(info.url).setOutputTemplate(out.absolutePath).addOption("-f",f.id).addOption("--no-playlist").addOption("--newline")
   val job=YtDlp.executeAsync(req,object:DownloadProgressCallback{
