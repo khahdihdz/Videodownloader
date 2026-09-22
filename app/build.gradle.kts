@@ -42,6 +42,7 @@ android {
         // Work around lint detector crashes caused by an incompatible Kotlin Analysis API.
         disable += "NullSafeMutableLiveData"
         disable += "RememberInComposition"
+        disable += "FrequentlyChangingValue"
     }
 }
 
