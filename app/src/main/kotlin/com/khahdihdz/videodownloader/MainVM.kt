@@ -1,7 +1,47 @@
 package com.khahdihdz.videodownloader
-import android.app.Application;import android.content.Intent;import androidx.lifecycle.AndroidViewModel;import androidx.lifecycle.viewModelScope;import kotlinx.coroutines.flow.MutableStateFlow;import kotlinx.coroutines.flow.StateFlow;import kotlinx.coroutines.launch;import androidx.core.content.ContextCompat
-class MainVM(a:Application):AndroidViewModel(a){
- private val d=Downloader(a);private val _info=MutableStateFlow<VideoInfo?>(null);val info:StateFlow<VideoInfo?> = _info;private val _err=MutableStateFlow<String?>(null);val err:StateFlow<String?> = _err;private val _loading=MutableStateFlow(false);val loading:StateFlow<Boolean> = _loading
- fun analyze(raw:String){val u=UrlDetector.extract(raw)?:raw.trim();if(UrlDetector.detect(u)==VideoPlatform.UNKNOWN){_err.value="Không nhận diện được nền tảng hoặc liên kết không được hỗ trợ.";return};_loading.value=true;_err.value=null;viewModelScope.launch{runCatching{d.analyze(UrlDetector.normalize(u))}.onSuccess{_info.value=it}.onFailure{_err.value="Không lấy được thông tin video: "+(it.message?:"lỗi không xác định")};_loading.value=false}}
- fun download(v:VideoInfo,f:Format){val i=Intent(getApplication(),DownloadService::class.java).apply{putExtra("url",v.url);putExtra("formatId",f.id);putExtra("height",f.height);putExtra("title",v.title)};ContextCompat.startForegroundService(getApplication(),i)}
+
+import android.app.Application
+import android.content.Intent
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+class MainVM(a: Application) : AndroidViewModel(a) {
+    private val d = Downloader(a)
+    private val _info = MutableStateFlow<VideoInfo?>(null)
+    val info: StateFlow<VideoInfo?> = _info
+    private val _err = MutableStateFlow<String?>(null)
+    val err: StateFlow<String?> = _err
+    private val _loading = MutableStateFlow(false)
+    val loading: StateFlow<Boolean> = _loading
+
+    fun analyze(raw: String) {
+        val u = UrlDetector.extract(raw) ?: raw.trim()
+        if (UrlDetector.detect(u) == VideoPlatform.UNKNOWN) {
+            _err.value = "Không nhận diện được nền tảng hoặc liên kết không được hỗ trợ."
+            return
+        }
+        _loading.value = true
+        _err.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { d.analyze(UrlDetector.normalize(u)) }
+                .onSuccess { _info.value = it }
+                .onFailure { _err.value = "Không lấy được thông tin video: " + (it.message ?: "lỗi không xác định") }
+            _loading.value = false
+        }
+    }
+
+    fun download(v: VideoInfo, f: Format) {
+        val i = Intent(getApplication(), DownloadService::class.java).apply {
+            putExtra("url", v.url)
+            putExtra("formatId", f.id)
+            putExtra("height", f.height)
+            putExtra("title", v.title)
+        }
+        ContextCompat.startForegroundService(getApplication(), i)
+    }
 }
