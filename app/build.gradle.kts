@@ -17,7 +17,7 @@ android {
     }
     buildTypes { release { isMinifyEnabled = false; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions { jvmTarget = "17" }\n    lint {\n        // Work around an AndroidX Lifecycle lint detector crash caused by an incompatible Kotlin Analysis API.\n        disable += "NullSafeMutableLiveData"\n    }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
