@@ -36,15 +36,8 @@ class Downloader(context: Context) {
   }.filter{it>0&&it<=4320}.distinct().sorted()
 
   val formats=heights.map{Format("best[height<=$it]",it,"$it p")}
-  if(!response.isSuccess || formats.isEmpty()) {
-   val reason = logs.lastOrNull{it.contains("ERROR",true)}
-    ?.substringAfter("ERROR:", "")
-    ?.trim()
-   throw IllegalStateException(
-    reason?.takeIf{it.isNotBlank()}
-     ?: "YouTube không trả về danh sách định dạng. Hãy thử lại sau."
-   )
-  }
+  // Metadata must remain usable even when YouTube blocks format enumeration.
+  // Recent YouTube changes can make yt-dlp fail to list formats while oEmbed/page metadata still works.
   return VideoInfo(normalized,UrlDetector.detect(normalized),meta.first,meta.second,meta.third,formats)
  }
 
